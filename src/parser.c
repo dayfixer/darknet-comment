@@ -1306,17 +1306,17 @@ network parse_network_cfg(char *filename)
 
 network parse_network_cfg_custom(char *filename, int batch, int time_steps)
 {
-    list *sections = read_cfg(filename);
-    node *n = sections->front;
-    if(!n) error("Config file has no sections");
-    network net = make_network(sections->size - 1);
-    net.gpu_index = gpu_index;
-    size_params params;
+    list *sections = read_cfg(filename);  // 读取网络配置文件obj.cfg,-->[section]
+    node *n = sections->front;            // 读取网络配置节点,-->node中的front
+    if(!n) error("Config file has no sections"); // node是空指针就报错
+    network net = make_network(sections->size - 1);  // 初始化network结构体，包括申请内存等等，返回一个net结构体
+    net.gpu_index = gpu_index;  // net的GPU序号
+    size_params params;         // 结构体size_params
+    // 如果batch=1，当然传入的是1
+    if (batch > 0) params.train = 0;    // allocates memory for Detection only，申请只用于目标检测的内存
+    else params.train = 1;              // allocates memory for Detection & Training，申请用于目标检测和训练的内存
 
-    if (batch > 0) params.train = 0;    // allocates memory for Detection only
-    else params.train = 1;              // allocates memory for Detection & Training
-
-    section *s = (section *)n->val;
+    section *s = (section *)n->val;     // val指针
     list *options = s->options;
     if(!is_network(s)) error("First section must be [net] or [network]");
     parse_net_options(options, &net);
@@ -1324,14 +1324,15 @@ network parse_network_cfg_custom(char *filename, int batch, int time_steps)
 #ifdef GPU
     printf("net.optimized_memory = %d \n", net.optimized_memory);
     if (net.optimized_memory >= 2 && params.train) {
+        // 为固定内存预分配8 GB CPU-RAM
         pre_allocate_pinned_memory((size_t)1024 * 1024 * 1024 * 8);   // pre-allocate 8 GB CPU-RAM for pinned memory
     }
 #endif  // GPU
-
-    params.h = net.h;
-    params.w = net.w;
-    params.c = net.c;
-    params.inputs = net.inputs;
+    // params与net都是结构体
+    params.h = net.h;  // height
+    params.w = net.w;  // width
+    params.c = net.c;  // channel
+    params.inputs = net.inputs;  // 
     if (batch > 0) net.batch = batch;
     if (time_steps > 0) net.time_steps = time_steps;
     if (net.batch < 1) net.batch = 1;
@@ -1356,6 +1357,7 @@ network parse_network_cfg_custom(char *filename, int batch, int time_steps)
     int count = 0;
     free_section(s);
     fprintf(stderr, "   layer   filters  size/strd(dil)      input                output\n");
+    // 循环打印所有层信息
     while(n){
         params.index = count;
         fprintf(stderr, "%4d ", count);
@@ -1364,6 +1366,15 @@ network parse_network_cfg_custom(char *filename, int batch, int time_steps)
         layer l = { (LAYER_TYPE)0 };
         LAYER_TYPE lt = string_to_layer_type(s->type);
         if(lt == CONVOLUTIONAL){
+            /* parse如下内容
+            [convolutional]     // 卷积层
+            batch_normalize=1   // 是否匹归一化处理
+            filters=64          // 卷积和数量
+            size=1              // 卷积核大小
+            stride=1            // 步长
+            pad=1               // 补边
+            activation=mish     // 激活函数
+            */
             l = parse_convolutional(options, params);
         }else if(lt == LOCAL){
             l = parse_local(options, params);

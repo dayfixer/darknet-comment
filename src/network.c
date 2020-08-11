@@ -241,7 +241,7 @@ char *get_layer_string(LAYER_TYPE a)
 
 network make_network(int n)
 {
-    network net = {0};
+    network net = {0};  // 部分初始化位0
     net.n = n;
     net.layers = (layer*)xcalloc(net.n, sizeof(layer));
     net.seen = (uint64_t*)xcalloc(1, sizeof(uint64_t));
@@ -249,7 +249,7 @@ network make_network(int n)
     net.total_bbox = (int*)xcalloc(1, sizeof(int));
     net.rewritten_bbox = (int*)xcalloc(1, sizeof(int));
     *net.rewritten_bbox = *net.total_bbox = 0;
-#ifdef GPU
+#ifdef GPU  // 如果有GPU，再初始化一些与GPU有关的网络参数
     net.input_gpu = (float**)xcalloc(1, sizeof(float*));
     net.truth_gpu = (float**)xcalloc(1, sizeof(float*));
 
@@ -393,11 +393,13 @@ float train_network_sgd(network net, data d, int n)
     return (float)sum/(n*batch);
 }
 
+// 训练函数
 float train_network(network net, data d)
 {
     return train_network_waitkey(net, d, 0);
 }
 
+// 训练函数...
 float train_network_waitkey(network net, data d, int wait_key)
 {
     assert(d.X.rows % net.batch == 0);

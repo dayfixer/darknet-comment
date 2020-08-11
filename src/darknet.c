@@ -428,10 +428,12 @@ void visualize(char *cfgfile, char *weightfile)
     wait_until_press_key_cv();
 #endif
 }
-
+/*
+ * 函数入口 
+ */
 int main(int argc, char **argv)
 {
-#ifdef _DEBUG
+#ifdef _DEBUG  // 内存检查
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     printf(" _DEBUG is used \n");
 #endif
@@ -462,7 +464,7 @@ int main(int argc, char **argv)
 
 #ifndef GPU
     gpu_index = -1;
-    printf(" GPU isn't used \n");
+    printf(" GPU isn't used \n");  // 未使用GPU
     init_cpu();
 #else   // GPU
     if(gpu_index >= 0){
@@ -479,7 +481,7 @@ int main(int argc, char **argv)
 
 #endif  // GPU
 
-    show_opencv_info();
+    show_opencv_info();  // 打印opencv信息
 
     if (0 == strcmp(argv[1], "average")){
         average(argc, argv);
@@ -489,7 +491,7 @@ int main(int argc, char **argv)
         run_voxel(argc, argv);
     } else if (0 == strcmp(argv[1], "super")){
         run_super(argc, argv);
-    } else if (0 == strcmp(argv[1], "detector")){
+    } else if (0 == strcmp(argv[1], "detector")){  // 目标检测
         run_detector(argc, argv);
     } else if (0 == strcmp(argv[1], "detect")){
         float thresh = find_float_arg(argc, argv, "-thresh", .24);

@@ -23,25 +23,29 @@ int check_mistakes = 0;
 
 static int coco_ids[] = { 1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90 };
 
+// 训练目标检测
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear, int dont_show, int calc_map, int mjpeg_port, int show_imgs, int benchmark_layers, char* chart_path)
 {
-    list *options = read_data_cfg(datacfg);
-    char *train_images = option_find_str(options, "train", "data/train.txt");
+    list *options = read_data_cfg(datacfg);  // 读取数据集配置文件obj.data
+    //查找配置文件里train的值，如果没有则使用第三个参数"data/train.txt"作为默认值
+    char *train_images = option_find_str(options, "train", "data/train.txt");  // 读取数据集配置，下同
     char *valid_images = option_find_str(options, "valid", train_images);
     char *backup_directory = option_find_str(options, "backup", "/backup/");
 
-    network net_map;
-    if (calc_map) {
-        FILE* valid_file = fopen(valid_images, "r");
+    network net_map;  // 定义一个网络结构
+    if (calc_map) {  // 是否计算mAP
+        FILE* valid_file = fopen(valid_images, "r");  // 打开验证集图片
         if (!valid_file) {
             printf("\n Error: There is no %s file for mAP calculation!\n Don't use -map flag.\n Or set valid=%s in your %s file. \n", valid_images, train_images, datacfg);
             getchar();
             exit(-1);
         }
-        else fclose(valid_file);
+        else fclose(valid_file);  // 关闭验证集句柄
 
         cuda_set_device(gpus[0]);
         printf(" Prepare additional network for mAP calculation...\n");
+
+        // 解析yolovx-obj.cfg配置文件
         net_map = parse_network_cfg_custom(cfgfile, 1, 1);
         net_map.benchmark_layers = benchmark_layers;
         const int net_classes = net_map.layers[net_map.n - 1].classes;
@@ -60,7 +64,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
         free_ptrs((void**)names, net_map.layers[net_map.n - 1].classes);
     }
 
-    srand(time(0));
+    srand(time(0));  // 随机数种子，配合下面的rand()实现随机数的产生
     char *base = basecfg(cfgfile);
     printf("%s\n", base);
     float avg_loss = -1;
@@ -113,6 +117,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
 
     int classes = l.classes;
 
+    // 读入train.txt文件中每行的图片地址
     list *plist = get_paths(train_images);
     int train_images_num = plist->size;
     char **paths = (char **)list_to_array(plist);
@@ -136,7 +141,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     args.m = plist->size;
     args.classes = classes;
     args.flip = net.flip;
-    args.jitter = l.jitter;
+    args.jitter = l.jitter;  // 抖动产生额外的数据
     args.resize = l.resize;
     args.num_boxes = l.max_boxes;
     args.truth_size = l.truth_size;
@@ -146,13 +151,14 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     args.type = DETECTION_DATA;
     args.threads = 64;    // 16 or 64
 
-    args.angle = net.angle;
-    args.gaussian_noise = net.gaussian_noise;
-    args.blur = net.blur;
-    args.mixup = net.mixup;
-    args.exposure = net.exposure;
-    args.saturation = net.saturation;
-    args.hue = net.hue;
+    // 数据扩增
+    args.angle = net.angle;  // 角度
+    args.gaussian_noise = net.gaussian_noise;  // 高斯噪声
+    args.blur = net.blur;  // 模糊
+    args.mixup = net.mixup;  // 混合
+    args.exposure = net.exposure;  // 曝光
+    args.saturation = net.saturation;  // 饱和
+    args.hue = net.hue;  // hue
     args.letter_box = net.letter_box;
     args.mosaic_bound = net.mosaic_bound;
     args.contrastive = net.contrastive;
@@ -160,7 +166,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     if (dont_show && show_imgs) show_imgs = 2;
     args.show_imgs = show_imgs;
 
-#ifdef OPENCV
+#ifdef OPENCV  // 如果使用opencv
     //int num_threads = get_num_threads();
     //if(num_threads > 2) args.threads = get_num_threads() - 2;
     args.threads = 6 * ngpus;   // 3 for - Amazon EC2 Tesla V100: p3.2xlarge (8 logical cores) - p3.16xlarge
@@ -190,7 +196,9 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     double time_remaining, avg_time = -1, alpha_time = 0.01;
 
     //while(i*imgs < N*120){
+    //这里的net.max_batches就是你yolovx-obj.cfg里定义的max_batches的值
     while (get_current_iteration(net) < net.max_batches) {
+        // 是否多尺度训练
         if (l.random && count++ % 10 == 0) {
             float rand_coef = 1.4;
             if (l.random != 1.0) rand_coef = l.random;
@@ -234,7 +242,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
             }
             else
                 printf("\n %d x %d \n", dim_w, dim_h);
-
+            // 线程相关
             pthread_join(load_thread, 0);
             train = buffer;
             free_data(train);
@@ -289,6 +297,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
             loss = train_networks(nets, ngpus, train, 4);
         }
 #else
+        // ！！训练的函数，返回损失值
         loss = train_network(net, train);
 #endif
         if (avg_loss < 0 || avg_loss != avg_loss) avg_loss = loss;    // if(-inf or nan)
@@ -312,6 +321,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
             else fprintf(stderr, "\n Tensor Cores are used.\n");
             fflush(stderr);
         }
+        //输出损失等数值
         printf("\n %d: %f, %f avg loss, %f rate, %lf seconds, %d images, %f hours left\n", iteration, loss, avg_loss, get_current_rate(net), (what_time_is_it_now() - time), iteration*imgs, avg_time);
         fflush(stdout);
 
@@ -376,11 +386,13 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
             if (cur_con_acc >= 0) avg_contrastive_acc = avg_contrastive_acc*0.99 + cur_con_acc * 0.01;
             printf("  avg_contrastive_acc = %f \n", avg_contrastive_acc);
         }
+        //画出损失函数图
         draw_train_loss(windows_name, img, img_size, avg_loss, max_img_loss, iteration, net.max_batches, mean_average_precision, draw_precision, "mAP%", avg_contrastive_acc / 100, dont_show, mjpeg_port, avg_time);
 #endif    // OPENCV
 
         //if (i % 1000 == 0 || (i < 1000 && i % 100 == 0)) {
         //if (i % 100 == 0) {
+        //每1000轮保存一次权重文件，名字为yolo-obj(i).weights
         if (iteration >= (iter_save + 1000) || iteration % 1000 == 0) {
             iter_save = iteration;
 #ifdef GPU
@@ -1929,8 +1941,10 @@ void draw_object(char *datacfg, char *cfgfile, char *weightfile, char *filename,
 }
 #endif // defined(OPENCV) && defined(GPU)
 
+// 目标检测
 void run_detector(int argc, char **argv)
 {
+    //查看argv里有没有'-dont_show'这个参数，有返回1，无返回0，下同
     int dont_show = find_arg(argc, argv, "-dont_show");
     int benchmark = find_arg(argc, argv, "-benchmark");
     int benchmark_layers = find_arg(argc, argv, "-benchmark_layers");
@@ -1938,7 +1952,9 @@ void run_detector(int argc, char **argv)
     if (benchmark) dont_show = 1;
     int show = find_arg(argc, argv, "-show");
     int letter_box = find_arg(argc, argv, "-letter_box");
-    int calc_map = find_arg(argc, argv, "-map");
+    // mAP只是把每个类别的AP都算一遍，再取平均值，AP针对单个类别，mAP针对所有类别
+    // mAP=所有类别的AP之和/类别的总个数
+    int calc_map = find_arg(argc, argv, "-map");  // mAP,mean average precisionp:平均精度均值
     int map_points = find_int_arg(argc, argv, "-points", 0);
     check_mistakes = find_arg(argc, argv, "-check_mistakes");
     int show_imgs = find_arg(argc, argv, "-show_imgs");
@@ -1989,19 +2005,21 @@ void run_detector(int argc, char **argv)
     else {
         gpu = gpu_index;
         gpus = &gpu;
-        ngpus = 1;
+        ngpus = 1;  // 不适用gpu,nogpu==1
     }
 
     int clear = find_arg(argc, argv, "-clear");
 
-    char *datacfg = argv[3];
-    char *cfg = argv[4];
-    char *weights = (argc > 5) ? argv[5] : 0;
+    char *datacfg = argv[3];  // cfg/xxx.data，数据集的配置文件
+    char *cfg = argv[4];      // cfg/xxx.cfg，网络配置文件
+    char *weights = (argc > 5) ? argv[5] : 0;  // 权重文件
     if (weights)
         if (strlen(weights) > 0)
             if (weights[strlen(weights) - 1] == 0x0d) weights[strlen(weights) - 1] = 0;
     char *filename = (argc > 6) ? argv[6] : 0;
+    // 测试目标检测
     if (0 == strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, dont_show, ext_output, save_labels, outfile, letter_box, benchmark_layers);
+    // 训练目标检测
     else if (0 == strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear, dont_show, calc_map, mjpeg_port, show_imgs, benchmark_layers, chart_path);
     else if (0 == strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
     else if (0 == strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights);

@@ -106,7 +106,7 @@ void del_arg(int argc, char **argv, int index)
     for(i = index; i < argc-1; ++i) argv[i] = argv[i+1];
     argv[i] = 0;
 }
-
+// 查找参数是否存在，存在返回1，不存在返回0
 int find_arg(int argc, char* argv[], char *arg)
 {
     int i;

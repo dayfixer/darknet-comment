@@ -5,6 +5,7 @@
 #include "utils.h"
 #include "data.h"
 
+// 读取数据集
 list *read_data_cfg(char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -106,6 +107,7 @@ char *option_find(list *l, char *key)
     }
     return 0;
 }
+// 查找数据集配置文件中的字符串
 char *option_find_str(list *l, char *key, char *def)
 {
     char *v = option_find(l, key);
