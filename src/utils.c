@@ -25,6 +25,20 @@
 #pragma warning(disable: 4996)
 #endif
 
+/*
+** malloc调用形式为(类型*)malloc(size)：
+**      在内存的动态存储区中分配一块长度为“size”字节的连续区域，返回该区域的首地址。
+** calloc调用形式为(类型*)calloc(n，size)：
+**      在内存的动态存储区中分配n块长度为“size”字节的连续区域，返回首地址。
+** realloc调用形式为(类型*)realloc(*ptr，size)：
+**      将ptr内存大小增大到size。
+** free的调用形式为free(void*ptr)：
+**      释放ptr所指向的一块内存空间。C++中为new/delete函数。
+**/
+
+// 由于原始的malloc在分配堆内存失败时返回NULL
+// 所有作者重新写了这个函数，在分配失败时报个错
+// ps：Joseph Redmon用的是malloc，AB改成的xmalloc
 void *xmalloc(size_t size) {
     void *ptr=malloc(size);
     if(!ptr) {
@@ -33,6 +47,8 @@ void *xmalloc(size_t size) {
     return ptr;
 }
 
+// 分配n块大小为size的内存，分配失败时报错
+// AB改成的xcalloc
 void *xcalloc(size_t nmemb, size_t size) {
     void *ptr=calloc(nmemb,size);
     if(!ptr) {
@@ -42,6 +58,8 @@ void *xcalloc(size_t nmemb, size_t size) {
     return ptr;
 }
 
+// 重新分配指针，内存区域变为size大小，分配失败时报错
+// AB改的xrealloc
 void *xrealloc(void *ptr, size_t size) {
     ptr=realloc(ptr,size);
     if(!ptr) {
@@ -327,6 +345,7 @@ void error(const char *s)
     exit(EXIT_FAILURE);
 }
 
+// malloc报错，下同
 void malloc_error()
 {
     fprintf(stderr, "xMalloc error - possibly out of CPU RAM \n");
@@ -345,6 +364,7 @@ void realloc_error()
     exit(EXIT_FAILURE);
 }
 
+// 打开文件错误提示
 void file_error(char *s)
 {
     fprintf(stderr, "Couldn't open file: %s\n", s);
@@ -366,6 +386,10 @@ list *split_str(char *s, char delim)
     return l;
 }
 
+/*
+**  Pyhon中有该函数，此处用C语言实现：删除输入字符数组s中的空白符（包括'\n','\t',' '）
+**  此函数用来统一读入的配置文件格式，有些配置文件书写时可能含有空白符（但是不能含有逗号等其他的符号）
+*/
 void strip(char *s)
 {
     size_t i;
@@ -373,9 +397,14 @@ void strip(char *s)
     size_t offset = 0;
     for(i = 0; i < len; ++i){
         char c = s[i];
+        // 回车 代码：CR ASCII码：/r ，十六进制，0x0d，回车的作用只是移动光标至该行的起始位置；
+        // 换行 代码：LF ASCII码：/n ，十六进制，0x0a，换行至下一行行首起始位置；
+        // offset为要剔除的字符数，比如offset=2，说明到此时需要剔除2个空白符，
+        // 剔除完两个空白符之后，后面的要往前补上，不能留空
         if(c==' '||c=='\t'||c=='\n'||c =='\r'||c==0x0d||c==0x0a) ++offset;
         else s[i-offset] = c;
     }
+    // 依然在真正有效的字符数组最后紧跟一个terminating null-characteristic '\0'
     s[len-offset] = '\0';
 }
 
@@ -413,28 +442,64 @@ void free_ptrs(void **ptrs, int n)
     free(ptrs);
 }
 
+/*
+**  读取文件中的某一行（仅读取一行，其读取的结果中不再有换行符或者eof）
+**  输入： *fp     打开的文件流指针
+**  输出： 读到的整行字符，返回C风格字符数组指针（最大512字节），如果读取失败，返回0
+*/
 char *fgetl(FILE *fp)
 {
     if(feof(fp)) return 0;
+
+    // 默认一行的字符数目最大为512，如果不够，下面会有应对方法
     size_t size = 512;
+
+    // 动态分配整行的内存：C风格字符数组
     char* line = (char*)xmalloc(size * sizeof(char));
+
+    // <stdio.h>    char* fgets(char * str, int num, FILE *stream);
+    // 从stream中读取一行数据存储到str中，最大字符数为num
+    // fgets()函数读取数据时会以新行或者文件终止符为断点，也就是遇到新行会停止继续读入，遇到文件终止符号也会停止读入
+    // 注意终止符（换行符号以及eof）也会存储到str中。如果数据读取失败，返回空指针。
     if(!fgets(line, size, fp)){
         free(line);
         return 0;
     }
 
+    // <string.h>   size_t strlen ( const char * str );
+    // 返回C String数组str的长度
+    // （也就是数组中存储的元素个数，不包括C字符数组最后的终止空字符'\0'， terminating null-character）
     size_t curr = strlen(line);
 
+    // 终止符（换行符号以及eof）也会存储到str中，所以可用作while终止条件
+    // 如果一整行数据顺利读入到line中，那么line[curr-1]应该会是换行符或者eof，
+    // 这样就可以绕过while循环中的处理；否则说明这行数据未读完，line空间不够，需要重新分配，重新读取
     while((line[curr-1] != '\n') && !feof(fp)){
+        // 这个if语句略显多余，感觉不可能会出现curr!=size-1的情况，
+        // 因为文件流没有问题（否则进入这个函数就返回了），那就肯定是line空间不够，
+        // 才导致line的最后一个有效存储元素不是换行符或者eof
         if(curr == size-1){
+            // line空间不够，扩容两倍
             size *= 2;
+            // void* realloc (void* ptr, size_t size);
+            // 重新动态分配大小：扩容两倍
             line = (char*)xrealloc(line, size * sizeof(char));
+
+            // 若line==null的报错删掉了，因为xrealloc自带报错~
         }
         size_t readsize = size-curr;
+
+        // 之前因为line空间不够，没有读完一整行，此处不是从头开始读，
+        // 而是接着往下读，并接着往下存（fgets会记着上一次停止读数据的地方）
+        // #define INT_MAX       2147483647
         if(readsize > INT_MAX) readsize = INT_MAX-1;
         fgets(&line[curr], readsize, fp);
         curr = strlen(line);
     }
+
+    // 实际上'\n'并不是我们想要的有效字符，因此，将其置为'\0'，
+    // 这样便于以后的处理。'\0'是C风格字符数组的terminating null-character，
+    // 识别C字符数组时，以此为终点（不包括此字符）
     if(curr >= 2)
         if(line[curr-2] == 0x0d) line[curr-2] = 0x00;
 

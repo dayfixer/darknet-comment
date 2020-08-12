@@ -2029,8 +2029,10 @@ void run_detector(int argc, char **argv)
         int it_num = 100;
         draw_object(datacfg, cfg, weights, filename, thresh, dont_show, it_num, letter_box, benchmark_layers);
     }
-    else if (0 == strcmp(argv[2], "demo")) {
+    else if (0 == strcmp(argv[2], "demo")) { 
+        // 此处对应命令`./darknet detector demo ...的第3个参数
         list *options = read_data_cfg(datacfg);
+        // 
         int classes = option_find_int(options, "classes", 20);
         char *name_list = option_find_str(options, "names", "data/names.list");
         char **names = get_labels(name_list);

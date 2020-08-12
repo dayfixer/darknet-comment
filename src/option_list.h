@@ -3,6 +3,7 @@
 #include "darknet.h"
 #include "list.h"
 
+// 链表
 typedef struct{
     char *key;
     char *val;
